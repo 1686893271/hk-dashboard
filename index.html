@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>香港疫情数据可视化大屏</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0c1929 0%, #1a2a4a 50%, #0c1929 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(90deg, rgba(30, 58, 95, 0.8), rgba(20, 40, 70, 0.9), rgba(30, 58, 95, 0.8));
+            border-bottom: 2px solid #3b82f6;
+            position: relative;
+        }
+        
+        .header::before,
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 200px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+        }
+        
+        .header::before {
+            left: 50px;
+        }
+        
+        .header::after {
+            right: 50px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 8px;
+            text-shadow: 0 0 30px rgba(96, 165, 250, 0.5);
+        }
+        
+        .header .subtitle {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+        
+        .stats-container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            padding: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, rgba(30, 58, 95, 0.9), rgba(20, 40, 70, 0.8));
+            border-radius: 12px;
+            padding: 20px 40px;
+            min-width: 180px;
+            text-align: center;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.3);
+        }
+        
+        .stat-card .icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .label {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+        
+        .stat-card.confirm .value { color: #f97316; }
+        .stat-card.recover .value { color: #10b981; }
+        .stat-card.death .value { color: #ef4444; }
+        .stat-card.current .value { color: #3b82f6; }
+        
+        .container {
+            width: 100%;
+            padding: 15px;
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: 350px 350px;
+            gap: 15px;
+        }
+        
+        .chart-container {
+            background: linear-gradient(135deg, rgba(30, 58, 95, 0.9), rgba(20, 40, 70, 0.8));
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chart-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #60a5fa;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+        }
+        
+        .chart-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: linear-gradient(180deg, #3b82f6, #a78bfa);
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+        
+        .chart {
+            width: 100%;
+            flex: 1;
+        }
+        
+        .map-container {
+            grid-row: 1 / 3;
+            grid-column: 2;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #94a3b8;
+            flex-direction: column;
+        }
+        
+        .loading::after {
+            content: '';
+            width: 30px;
+            height: 30px;
+            border: 3px solid #3b82f6;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #ef4444;
+            text-align: center;
+            padding: 15px;
+        }
+        
+        @media screen and (max-width: 1400px) {
+            .container {
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: 300px 300px 500px;
+            }
+            
+            .map-container {
+                grid-row: 3;
+                grid-column: 1 / -1;
+            }
+        }
+        
+        @media screen and (max-width: 900px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 300px 300px 300px 300px 450px;
+            }
+            
+            .map-container {
+                grid-row: 5;
+                grid-column: 1;
+            }
+            
+            .stats-container {
+                gap: 15px;
+            }
+            
+            .stat-card {
+                min-width: 140px;
+                padding: 15px 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>香港疫情数据可视化大屏</h1>
+        <div class="subtitle" id="currentTime"></div>
+    </div>
+    
+    <div class="stats-container">
+        <div class="stat-card confirm">
+            <div class="icon">&#128167;</div>
+            <div class="value" id="totalConfirm">--</div>
+            <div class="label">累计确诊</div>
+        </div>
+        <div class="stat-card current">
+            <div class="icon">&#128200;</div>
+            <div class="value" id="totalCurrent">--</div>
+            <div class="label">现存确诊</div>
+        </div>
+        <div class="stat-card recover">
+            <div class="icon">&#128154;</div>
+            <div class="value" id="totalRecover">--</div>
+            <div class="label">累计康复</div>
+        </div>
+        <div class="stat-card death">
+            <div class="icon">&#128128;</div>
+            <div class="value" id="totalDeath">--</div>
+            <div class="label">累计死亡</div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="chart-container">
+            <div class="chart-title">每日新增确诊趋势</div>
+            <div id="newCasesChart" class="chart"><div class="loading">加载中</div></div>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">各区累计确诊排名</div>
+            <div id="districtChart" class="chart"><div class="loading">加载中</div></div>
+        </div>
+        
+        <div class="chart-container map-container">
+            <div class="chart-title">香港各区疫情分布地图</div>
+            <div id="hkMapChart" class="chart"><div class="loading">加载地图数据中...</div></div>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">风险等级分布</div>
+            <div id="riskChart" class="chart"><div class="loading">加载中</div></div>
+        </div>
+        
+        <div class="chart-container">
+            <div class="chart-title">每日康复与死亡对比</div>
+            <div id="recoveryDeathChart" class="chart"><div class="loading">加载中</div></div>
+        </div>
+    </div>
+    
+    <script>
+        const charts = {};
+        let allData = null;
+        
+        const commonGrid = {
+            left: '3%',
+            right: '3%',
+            bottom: '8%',
+            top: '8%',
+            containLabel: true
+        };
+        
+        const commonAxisLabel = {
+            color: '#94a3b8',
+            fontSize: 10
+        };
+        
+        const nameMapping = {
+            '中西区': '中西區',
+            '湾仔区': '灣仔區',
+            '东区': '東區',
+            '南区': '南區',
+            '油尖旺区': '油尖旺區',
+            '深水埗区': '深水埗區',
+            '九龙城区': '九龍城區',
+            '黄大仙区': '黃大仙區',
+            '观塘区': '觀塘區',
+            '葵青区': '葵青區',
+            '荃湾区': '荃灣區',
+            '屯门区': '屯門區',
+            '元朗区': '元朗區',
+            '北区': '北區',
+            '大埔区': '大埔區',
+            '沙田区': '沙田區',
+            '西贡区': '西貢區',
+            '离岛区': '離島區'
+        };
+        
+        function initChart(id, option) {
+            const dom = document.getElementById(id);
+            if (dom) {
+                dom.innerHTML = '';
+                charts[id] = echarts.init(dom);
+                charts[id].setOption(option);
+            }
+        }
+        
+        function showError(id, message) {
+            const dom = document.getElementById(id);
+            if (dom) {
+                dom.innerHTML = '<div class="error">' + message + '</div>';
+            }
+        }
+        
+        function showLoading(id, message) {
+            const dom = document.getElementById(id);
+            if (dom) {
+                dom.innerHTML = '<div class="loading">' + message + '</div>';
+            }
+        }
+        
+        function updateTime() {
+            const now = new Date();
+            const options = { 
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            document.getElementById('currentTime').textContent = 
+                '数据更新时间: ' + now.toLocaleString('zh-CN', options);
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+        
+        async function loadData() {
+            try {
+                const response = await fetch('data.json');
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                allData = await response.json();
+                
+                loadStats();
+                loadDailyCases();
+                loadDistrictCases();
+                loadRecoveryDeath();
+                loadRiskDistribution();
+                loadHKMap();
+            } catch (err) {
+                console.error('Error loading data:', err);
+                showError('newCasesChart', '数据加载失败: ' + err.message);
+                showError('districtChart', '数据加载失败: ' + err.message);
+                showError('recoveryDeathChart', '数据加载失败: ' + err.message);
+                showError('riskChart', '数据加载失败: ' + err.message);
+                showError('hkMapChart', '数据加载失败: ' + err.message);
+            }
+        }
+        
+        function loadStats() {
+            if (!allData) return;
+            
+            document.getElementById('totalConfirm').textContent = allData.stats.total_confirm.toLocaleString();
+            document.getElementById('totalCurrent').textContent = allData.stats.total_current.toLocaleString();
+            document.getElementById('totalRecover').textContent = allData.stats.total_recover.toLocaleString();
+            document.getElementById('totalDeath').textContent = allData.stats.total_death.toLocaleString();
+        }
+        
+        function loadDailyCases() {
+            if (!allData) return;
+            
+            const data = allData.daily_cases;
+            const step = Math.ceil(data.dates.length / 12);
+            const filterData = (arr) => arr.filter((_, i) => i % step === 0);
+            
+            initChart('newCasesChart', {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    borderColor: '#3b82f6',
+                    textStyle: { color: '#fff' }
+                },
+                grid: commonGrid,
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: filterData(data.dates),
+                    axisLabel: { ...commonAxisLabel, rotate: 45 },
+                    axisLine: { lineStyle: { color: '#3b82f6' } }
+                },
+                yAxis: { 
+                    type: 'value', 
+                    axisLabel: commonAxisLabel,
+                    splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+                },
+                series: [{
+                    name: '每日新增确诊',
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    lineStyle: { width: 3, color: '#f97316' },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(249, 115, 22, 0.6)' },
+                            { offset: 1, color: 'rgba(249, 115, 22, 0.05)' }
+                        ])
+                    },
+                    itemStyle: { color: '#f97316' },
+                    data: filterData(data.new_cases)
+                }]
+            });
+        }
+        
+        function loadDistrictCases() {
+            if (!allData) return;
+            
+            const data = allData.district_cases;
+            
+            initChart('districtChart', {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    borderColor: '#3b82f6',
+                    textStyle: { color: '#fff' }
+                },
+                grid: {
+                    left: '3%',
+                    right: '10%',
+                    bottom: '3%',
+                    top: '3%',
+                    containLabel: true
+                },
+                xAxis: { 
+                    type: 'value', 
+                    axisLabel: commonAxisLabel,
+                    splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: data.districts,
+                    axisLabel: { ...commonAxisLabel, fontSize: 9 },
+                    axisLine: { lineStyle: { color: '#3b82f6' } }
+                },
+                series: [{
+                    name: '累计确诊',
+                    type: 'bar',
+                    barWidth: '60%',
+                    label: {
+                        show: true,
+                        position: 'right',
+                        color: '#94a3b8',
+                        fontSize: 9
+                    },
+                    data: data.cases,
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                            { offset: 0, color: '#3b82f6' },
+                            { offset: 1, color: '#8b5cf6' }
+                        ]),
+                        borderRadius: [0, 4, 4, 0]
+                    }
+                }]
+            });
+        }
+        
+        function loadRecoveryDeath() {
+            if (!allData) return;
+            
+            const data = allData.recovery_death;
+            const step = Math.ceil(data.dates.length / 8);
+            const filterData = (arr) => arr.filter((_, i) => i % step === 0);
+            
+            initChart('recoveryDeathChart', {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    borderColor: '#3b82f6',
+                    textStyle: { color: '#fff' }
+                },
+                legend: {
+                    data: ['新增康复', '新增死亡'],
+                    textStyle: { color: '#94a3b8', fontSize: 10 },
+                    top: '5%'
+                },
+                grid: {
+                    left: '3%',
+                    right: '3%',
+                    bottom: '8%',
+                    top: '18%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: filterData(data.dates),
+                    axisLabel: { ...commonAxisLabel, rotate: 45 },
+                    axisLine: { lineStyle: { color: '#3b82f6' } }
+                },
+                yAxis: { 
+                    type: 'value', 
+                    axisLabel: commonAxisLabel,
+                    splitLine: { lineStyle: { color: 'rgba(59, 130, 246, 0.1)' } }
+                },
+                series: [
+                    {
+                        name: '新增康复',
+                        type: 'line',
+                        smooth: true,
+                        symbol: 'circle',
+                        symbolSize: 5,
+                        lineStyle: { width: 2, color: '#10b981' },
+                        itemStyle: { color: '#10b981' },
+                        areaStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: 'rgba(16, 185, 129, 0.3)' },
+                                { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }
+                            ])
+                        },
+                        data: filterData(data.recovery)
+                    },
+                    {
+                        name: '新增死亡',
+                        type: 'line',
+                        smooth: true,
+                        symbol: 'circle',
+                        symbolSize: 5,
+                        lineStyle: { width: 2, color: '#ef4444' },
+                        itemStyle: { color: '#ef4444' },
+                        areaStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: 'rgba(239, 68, 68, 0.3)' },
+                                { offset: 1, color: 'rgba(239, 68, 68, 0.05)' }
+                            ])
+                        },
+                        data: filterData(data.death)
+                    }
+                ]
+            });
+        }
+        
+        function loadRiskDistribution() {
+            if (!allData) return;
+            
+            const data = allData.risk_distribution;
+            
+            const colorMap = {
+                '高风险': '#ef4444',
+                '中风险': '#f97316',
+                '低风险': '#10b981'
+            };
+            
+            const pieData = data.risk_levels.map((level, index) => ({
+                name: level,
+                value: data.counts[index],
+                itemStyle: { color: colorMap[level] || '#3b82f6' }
+            }));
+            
+            initChart('riskChart', {
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{b}: {c} ({d}%)',
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    borderColor: '#3b82f6',
+                    textStyle: { color: '#fff' }
+                },
+                legend: {
+                    orient: 'vertical',
+                    right: '5%',
+                    top: 'center',
+                    textStyle: { color: '#94a3b8', fontSize: 11 }
+                },
+                series: [{
+                    name: '风险等级',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['40%', '50%'],
+                    avoidLabelOverlap: false,
+                    itemStyle: {
+                        borderRadius: 8,
+                        borderColor: '#1e3a5f',
+                        borderWidth: 2
+                    },
+                    label: {
+                        show: true,
+                        position: 'outside',
+                        color: '#94a3b8',
+                        formatter: '{b}\n{d}%'
+                    },
+                    labelLine: {
+                        show: true,
+                        lineStyle: { color: '#3b82f6' }
+                    },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 14,
+                            fontWeight: 'bold'
+                        },
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    },
+                    data: pieData
+                }]
+            });
+        }
+        
+        async function loadHKMap() {
+            if (!allData) return;
+            
+            try {
+                showLoading('hkMapChart', '加载地图数据中...');
+                
+                const geoResponse = await fetch('Hong_Kong_18_Districts.geojson');
+                if (!geoResponse.ok) throw new Error('地图数据加载失败: HTTP ' + geoResponse.status);
+                
+                const geoJson = await geoResponse.json();
+                
+                geoJson.features.forEach(feature => {
+                    feature.properties.name = feature.properties.TCNAME;
+                });
+                
+                echarts.registerMap('HK', geoJson);
+                
+                const data = allData.district_map_data;
+                
+                const mappedData = data.map(item => ({
+                    name: nameMapping[item.name] || item.name,
+                    value: item.value,
+                    risk: item.risk
+                }));
+                
+                const maxValue = Math.max(...mappedData.map(d => d.value || 0));
+                
+                initChart('hkMapChart', {
+                    tooltip: {
+                        trigger: 'item',
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        borderColor: '#3b82f6',
+                        textStyle: { color: '#fff' },
+                        formatter: function(params) {
+                            if (params.value) {
+                                const riskColor = {
+                                    '高风险': '#ef4444',
+                                    '中风险': '#f97316',
+                                    '低风险': '#10b981'
+                                };
+                                const color = riskColor[params.data?.risk] || '#94a3b8';
+                                return `<div style="padding: 5px;">
+                                    <div style="font-weight: bold; margin-bottom: 5px;">${params.name}</div>
+                                    <div>累计确诊: <span style="color: #f97316; font-weight: bold;">${params.value}</span></div>
+                                    <div>风险等级: <span style="color: ${color}; font-weight: bold;">${params.data?.risk || '未知'}</span></div>
+                                </div>`;
+                            }
+                            return params.name;
+                        }
+                    },
+                    visualMap: {
+                        type: 'continuous',
+                        min: 0,
+                        max: maxValue > 0 ? maxValue : 10000,
+                        text: ['高', '低'],
+                        realtime: false,
+                        calculable: true,
+                        inRange: {
+                            color: ['#0c4a6e', '#0369a1', '#0284c7', '#0ea5e9', '#38bdf8', '#7dd3fc']
+                        },
+                        textStyle: { color: '#94a3b8', fontSize: 11 },
+                        left: 'left',
+                        bottom: '10%'
+                    },
+                    geo: {
+                        map: 'HK',
+                        roam: true,
+                        scaleLimit: { min: 0.8, max: 3 },
+                        zoom: 1.2,
+                        itemStyle: {
+                            areaColor: '#1e3a5f',
+                            borderColor: '#60a5fa',
+                            borderWidth: 1.5
+                        },
+                        emphasis: {
+                            itemStyle: { 
+                                areaColor: '#3b82f6',
+                                borderColor: '#93c5fd',
+                                borderWidth: 2
+                            },
+                            label: {
+                                show: true,
+                                color: '#ffffff',
+                                fontSize: 12,
+                                fontWeight: 'bold'
+                            }
+                        },
+                        label: {
+                            show: true,
+                            color: '#94a3b8',
+                            fontSize: 9
+                        }
+                    },
+                    series: [{
+                        name: '疫情分布',
+                        type: 'map',
+                        map: 'HK',
+                        geoIndex: 0,
+                        data: mappedData
+                    }]
+                });
+            } catch (err) {
+                console.error('Error loading HK map:', err);
+                showError('hkMapChart', '地图加载失败: ' + err.message);
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Page loaded, starting to load data...');
+            loadData();
+        });
+        
+        window.addEventListener('resize', function() {
+            Object.values(charts).forEach(function(chart) {
+                if (chart && chart.resize) {
+                    chart.resize();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
