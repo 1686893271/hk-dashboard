@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>香港疫情数据可视化</title>
+    <!-- 引入ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .chart-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        .stat-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        .clock {
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- 顶部标题和时钟 -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold mb-4 md:mb-0 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
+                香港疫情数据可视化大屏
+            </h1>
+            <div class="clock text-xl font-medium">
+                <span id="current-time"></span>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="stat-card p-6">
+                <div class="text-sm text-gray-300 mb-1">累计确诊</div>
+                <div class="text-3xl font-bold text-blue-400" id="total-confirm">--</div>
+            </div>
+            <div class="stat-card p-6">
+                <div class="text-sm text-gray-300 mb-1">现存确诊</div>
+                <div class="text-3xl font-bold text-yellow-400" id="total-current">--</div>
+            </div>
+            <div class="stat-card p-6">
+                <div class="text-sm text-gray-300 mb-1">累计康复</div>
+                <div class="text-3xl font-bold text-green-400" id="total-recover">--</div>
+            </div>
+            <div class="stat-card p-6">
+                <div class="text-sm text-gray-300 mb-1">累计死亡</div>
+                <div class="text-3xl font-bold text-red-400" id="total-death">--</div>
+            </div>
+        </div>
+
+        <!-- 图表区域 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- 每日新增确诊和累计确诊 -->
+            <div class="chart-container p-4 h-80">
+                <h3 class="text-lg font-medium mb-4">每日新增确诊趋势</h3>
+                <div id="daily-cases-chart" class="w-full h-[calc(100%-40px)]"></div>
+            </div>
+            <!-- 各区累计确诊 -->
+            <div class="chart-container p-4 h-80">
+                <h3 class="text-lg font-medium mb-4">各区累计确诊分布</h3>
+                <div id="district-cases-chart" class="w-full h-[calc(100%-40px)]"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- 每日新增康复与死亡 -->
+            <div class="chart-container p-4 h-80">
+                <h3 class="text-lg font-medium mb-4">每日新增康复与死亡</h3>
+                <div id="recovery-death-chart" class="w-full h-[calc(100%-40px)]"></div>
+            </div>
+            <!-- 风险等级分布 -->
+            <div class="chart-container p-4 h-80">
+                <h3 class="text-lg font-medium mb-4">风险等级分布</h3>
+                <div id="risk-distribution-chart" class="w-full h-[calc(100%-40px)]"></div>
+            </div>
+        </div>
+
+        <!-- 香港地图 -->
+        <div class="chart-container p-4 h-96 mb-6">
+            <h3 class="text-lg font-medium mb-4">香港各区疫情分布</h3>
+            <div id="hk-map-chart" class="w-full h-[calc(100%-40px)]"></div>
+        </div>
+    </div>
+
+    <script>
+        // 实时时钟
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('current-time').textContent = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // 加载数据
+        fetch('data.json')
+            .then(response => response.json())
+            .then(data => {
+                // 更新统计数据
+                document.getElementById('total-confirm').textContent = data.stats.total_confirm.toLocaleString();
+                document.getElementById('total-current').textContent = data.stats.total_current.toLocaleString();
+                document.getElementById('total-recover').textContent = data.stats.total_recover.toLocaleString();
+                document.getElementById('total-death').textContent = data.stats.total_death.toLocaleString();
+
+                // 初始化图表
+                initDailyCasesChart(data.daily_cases);
+                initDistrictCasesChart(data.district_cases);
+                initRecoveryDeathChart(data.recovery_death);
+                initRiskDistributionChart(data.risk_distribution);
+                initHKMapChart(data.district_map_data);
+            })
+            .catch(error => {
+                console.error('加载数据失败:', error);
+            });
+
+        // 每日新增确诊和累计确诊图表
+        function initDailyCasesChart(data) {
+            const chart = echarts.init(document.getElementById('daily-cases-chart'));
+            const option = {
+                tooltip: {
+                    trigger: 'axis'
+                },
+                legend: {
+                    data: ['每日新增确诊', '每日累计确诊'],
+                    textStyle: { color: '#fff' }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: data.dates,
+                    axisLabel: { color: '#ccc' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: '#ccc' }
+                },
+                series: [
+                    {
+                        name: '每日新增确诊',
+                        type: 'line',
+                        data: data.new_cases,
+                        smooth: true,
+                        itemStyle: { color: '#3b82f6' }
+                    },
+                    {
+                        name: '每日累计确诊',
+                        type: 'line',
+                        data: data.total_cases,
+                        smooth: true,
+                        itemStyle: { color: '#8b5cf6' }
+                    }
+                ],
+                backgroundColor: 'transparent'
+            };
+            chart.setOption(option);
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        // 各区累计确诊图表
+        function initDistrictCasesChart(data) {
+            const chart = echarts.init(document.getElementById('district-cases-chart'));
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: data.districts,
+                    axisLabel: { 
+                        color: '#ccc',
+                        rotate: 45
+                    }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: '#ccc' }
+                },
+                series: [
+                    {
+                        name: '累计确诊',
+                        type: 'bar',
+                        data: data.cases,
+                        itemStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: '#3b82f6' },
+                                { offset: 1, color: '#1e40af' }
+                            ])
+                        }
+                    }
+                ],
+                backgroundColor: 'transparent'
+            };
+            chart.setOption(option);
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        // 每日新增康复与死亡图表
+        function initRecoveryDeathChart(data) {
+            const chart = echarts.init(document.getElementById('recovery-death-chart'));
+            const option = {
+                tooltip: {
+                    trigger: 'axis'
+                },
+                legend: {
+                    data: ['每日新增康复', '每日新增死亡'],
+                    textStyle: { color: '#fff' }
+                },
+                xAxis: {
+                    type: 'category',
+                    data: data.dates,
+                    axisLabel: { color: '#ccc' }
+                },
+                yAxis: {
+                    type: 'value',
+                    axisLabel: { color: '#ccc' }
+                },
+                series: [
+                    {
+                        name: '每日新增康复',
+                        type: 'line',
+                        data: data.recovery,
+                        smooth: true,
+                        itemStyle: { color: '#10b981' }
+                    },
+                    {
+                        name: '每日新增死亡',
+                        type: 'line',
+                        data: data.death,
+                        smooth: true,
+                        itemStyle: { color: '#ef4444' }
+                    }
+                ],
+                backgroundColor: 'transparent'
+            };
+            chart.setOption(option);
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        // 风险等级分布图表
+        function initRiskDistributionChart(data) {
+            const chart = echarts.init(document.getElementById('risk-distribution-chart'));
+            const option = {
+                tooltip: {
+                    trigger: 'item'
+                },
+                legend: {
+                    orient: 'vertical',
+                    left: 'left',
+                    textStyle: { color: '#fff' }
+                },
+                series: [
+                    {
+                        name: '风险等级',
+                        type: 'pie',
+                        radius: '60%',
+                        data: data.risk_levels.map((level, index) => ({
+                            value: data.counts[index],
+                            name: level
+                        })),
+                        emphasis: {
+                            itemStyle: {
+                                shadowBlur: 10,
+                                shadowOffsetX: 0,
+                                shadowColor: 'rgba(0, 0, 0, 0.5)'
+                            }
+                        },
+                        itemStyle: {
+                            borderRadius: 10,
+                            borderColor: '#1a1a2e',
+                            borderWidth: 2
+                        }
+                    }
+                ],
+                backgroundColor: 'transparent'
+            };
+            chart.setOption(option);
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        // 香港地图图表
+        function initHKMapChart(data) {
+            const chart = echarts.init(document.getElementById('hk-map-chart'));
+            
+            // 加载地图数据
+            fetch('Hong_Kong_18_Districts.geojson')
+                .then(response => response.json())
+                .then(geoJson => {
+                    echarts.registerMap('香港', geoJson);
+                    
+                    const option = {
+                        tooltip: {
+                            trigger: 'item',
+                            formatter: function(params) {
+                                return `${params.name}<br/>累计确诊: ${params.value}<br/>风险等级: ${params.data.risk}`;
+                            }
+                        },
+                        visualMap: {
+                            min: 0,
+                            max: Math.max(...data.map(item => item.value)),
+                            left: 'left',
+                            top: 'bottom',
+                            text: ['高', '低'],
+                            calculable: true,
+                            inRange: {
+                                color: ['#e0f2fe', '#3b82f6', '#1e40af', '#1e3a8a', '#1e3a8a']
+                            },
+                            textStyle: { color: '#fff' }
+                        },
+                        series: [
+                            {
+                                name: '累计确诊',
+                                type: 'map',
+                                map: '香港',
+                                roam: true,
+                                label: {
+                                    show: true,
+                                    fontSize: 10,
+                                    color: '#fff'
+                                },
+                                data: data
+                            }
+                        ],
+                        backgroundColor: 'transparent'
+                    };
+                    
+                    chart.setOption(option);
+                    window.addEventListener('resize', () => chart.resize());
+                })
+                .catch(error => {
+                    console.error('加载地图数据失败:', error);
+                });
+        }
+    </script>
+</body>
+</html>
